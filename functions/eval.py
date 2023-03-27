@@ -1,5 +1,7 @@
 import chess
 
+MAX_SCORE = 5000
+
 DOUBLED_PAWN_PENALTY = 10
 ISOLATED_PAWN_PENALTY = 20
 BACKWARDS_PAWN_PENALTY = 8
@@ -63,10 +65,9 @@ king_endgame_pcsq = [
     0, 10, 20, 30, 30, 20, 10, 0
 ]
 
-# flip table is used for caluclation the piece/square values of dark pieces.
+# flip table is used for calculation the piece/square values of dark pieces.
 # piece/square value of light pawn = pawn_pcsq[sq]
 # piece/square value of dark pawn - pawn_pcsq[flip[sq]]
-# NOTE: because chess library starts from the last 0, use this to flip the index to the values used in TCSP
 flip = [
     56, 57, 58, 59, 60, 61, 62, 63,
     48, 49, 50, 51, 52, 53, 54, 55,
@@ -84,29 +85,55 @@ piece_values = {
     chess.KNIGHT: 300,
     chess.ROOK: 500,
     chess.QUEEN: 900,
-    chess.KING: 2000
+    chess.KING: 0
 }
 
 LIGHT = 0
 DARK = 1
 
 
-def evaluate(board: chess.Board, is_white: bool):
+def tanh(x):
+    """
+    tanh function - used to scale the evaluation function between [-1, 1].
+    This allows for the reward to be used directly without converting to discrete values, as well as handle
+    exploding reward issues which affect the UCT formula.
+    """
+    sigmoid = 1 / (1 + (5 ** -(x / 800)))
+    return 2 * sigmoid - 1
+
+
+def evaluate(chess_board: chess.Board, is_white: bool):
+    """
+    Board evaluation function from Tom Kerrigan's Simple Chess Program
+    Source: http://www.tckerrigan.com/Chess/TSCP/
+    """
+    if chess_board.is_checkmate():
+        if chess_board.result() == '1-0':  # if white win
+            if is_white:
+                return MAX_SCORE
+            else:
+                return -MAX_SCORE
+        elif chess_board.result() == '0-1':  # if white lose
+            if is_white:
+                return -MAX_SCORE
+            else:
+                return MAX_SCORE
+
     score = [0, 0]  # total score of each side
     piece_mat = [0, 0]  # value of a side's pieces
     pawn_mat = [0, 0]  # value of a side's pawns
 
-    pawn_rank = [[0]*10, [7]*10]
+    pawn_rank = [[0] * 10, [7] * 10]
 
     # first pass: set up pawn_rank, piece_mat, and pawn_mat
     for square in chess.SQUARES:
-        piece = board.piece_at(square)
+        piece = chess_board.piece_at(square)
         if piece:
             piece_value = piece_values[piece.piece_type]
             piece_color = LIGHT if piece.color == chess.WHITE else DARK
             if piece.piece_type == chess.PAWN:
                 pawn_mat[piece_color] += piece_value
-                location = flip[square]  # TODO: may need to remove this
+                location = flip[square]
                 col = location % 8 + 1
                 row = location // 8
                 if piece_color == LIGHT:
@@ -117,17 +144,16 @@ def evaluate(board: chess.Board, is_white: bool):
                         pawn_rank[DARK][col] = row
             else:
                 piece_mat[piece_color] += piece_value
-
     # second pass: evaluate each piece
     score[LIGHT] = piece_mat[LIGHT] + pawn_mat[LIGHT]
     score[DARK] = piece_mat[DARK] + pawn_mat[DARK]
 
     for square in chess.SQUARES:
-        piece = board.piece_at(square)
+        piece = chess_board.piece_at(square)
         if piece:
             piece_type = piece.piece_type
             color = LIGHT if piece.color == chess.WHITE else DARK
-            location = flip[square]  # TODO: may need to remove this
+            location = flip[square]
             if color == LIGHT:
                 if piece_type == chess.PAWN:
                     score[LIGHT] += eval_light_pawn(location, pawn_rank)
@@ -160,7 +186,6 @@ def evaluate(board: chess.Board, is_white: bool):
                 elif piece_type == chess.ROOK:
                     col = location % 8 + 1
                     row = location // 8
-                    # TODO: may have to flip this
                     if pawn_rank[DARK][col] == 7:
                         if pawn_rank[LIGHT][col] == 0:
                             score[DARK] += ROOK_OPEN_FILE_BONUS
@@ -190,15 +215,15 @@ def eval_light_pawn(square: int, pawn_rank):
         score -= DOUBLED_PAWN_PENALTY
 
     # if there are no friendly pawns on either side of this pawn, it is isolated
-    if pawn_rank[LIGHT][col-1] == 0 and pawn_rank[LIGHT][col+1] == 0:
+    if pawn_rank[LIGHT][col - 1] == 0 and pawn_rank[LIGHT][col + 1] == 0:
         score -= BACKWARDS_PAWN_PENALTY
 
     # if not isolated, might be backwards
-    elif pawn_rank[LIGHT][col-1] < row and pawn_rank[LIGHT][col+1] < row:
+    elif pawn_rank[LIGHT][col - 1] < row and pawn_rank[LIGHT][col + 1] < row:
         score -= BACKWARDS_PAWN_PENALTY
 
     # add bonus if enemy pawn is passed
-    if pawn_rank[DARK][col-1] >= row and pawn_rank[DARK][col] >= row and pawn_rank[DARK][col+1] >= row:
+    if pawn_rank[DARK][col - 1] >= row and pawn_rank[DARK][col] >= row and pawn_rank[DARK][col + 1] >= row:
         score += (7 - row) * PASSED_PAWN_BONUS
 
     return score
@@ -247,7 +272,7 @@ def eval_light_king(square: int, pawn_rank, piece_mat):
 
     # otherwise, assess penalty if there are open files near the king
     else:
-        for i in range(col, col+3):
+        for i in range(col, col + 3):
             if pawn_rank[LIGHT][i] == 0 and pawn_rank[DARK][i] == 7:
                 r -= 10
 
@@ -332,7 +357,6 @@ def eval_dkp(f, pawn_rank):
     return r
 
 
-# TODO: testing
 if __name__ == '__main__':
     board = chess.Board('r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4')
     print(board)

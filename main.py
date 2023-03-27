@@ -1,54 +1,9 @@
-import chess
-import chess.engine
-import chess.pgn
+from functions.compare_models import compare_models
+from models.mcts_root_parallelization import MCTSRootParallelization
+from players.mcts_player import MCTSPlayer
+from players.engine_player import EnginePlayer
 
-class StockfishPlayer():
-    def __init__(self, path='stockfish.exe', depth=10):
-        self.stockfish = chess.engine.SimpleEngine.popen_uci('stockfish.exe')
-        self.depth = depth
-
-    def get_next_move(self, fen):
-        board = chess.Board(fen)
-        analysis = self.stockfish.analyse(board, chess.engine.Limit(depth=self.depth))
-        return analysis['pv'][0]
-
-def play_vs_stockfish():
-    board = chess.Board()
-    engine = chess.engine.SimpleEngine.popen_uci('stockfish.exe')
-
-    #game = chess.pgn.Game()
-
-    while((not board.is_game_over())):
-        pass
-
-
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    knight_pcsq = [
-        -10, -10, -10, -10, -10, -10, -10, -10,
-        -10, 0, 0, 0, 0, 0, 0, -10,
-        -10, 0, 5, 5, 5, 5, 0, -10,
-        -10, 0, 5, 10, 10, 5, 0, -10,
-        -10, 0, 5, 10, 10, 5, 0, -10,
-        -10, 0, 5, 5, 5, 5, 0, -10,
-        -10, 0, 0, 0, 0, 0, 0, -10,
-        -10, -30, -10, -10, -10, -10, -30, -10
-    ]
-
-    b = chess.Board()
-    print(b)
-    #print(b.pieces(chess.PAWN, chess.BLACK))
-    #for i in b.pieces(chess.PAWN, chess.BLACK):
-    #    print(i)
-    for square in chess.SQUARES:
-        piece = b.piece_at(square)
-        if piece:
-            print(square//8)
-            print(piece)
-            print(piece.color == chess.WHITE)
-            print(piece.piece_type == chess.ROOK)
-            print()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    compare_models(MCTSPlayer(MCTSRootParallelization(C=0.25, max_moves=1, bias_weight=0.05, PW_A=60, PW_B=1.35, n_unpruned=4, max_sims=100000)),
+                   EnginePlayer(),
+                   verbose=True)
